@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CommandLine;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Azure.Storage;
 using Microsoft.Azure.Storage.Auth;
 using Microsoft.Azure.Storage.Blob;
@@ -35,7 +36,7 @@ namespace AzureBlobMimeTypeReset
                 Options = ((Parsed<Options>)parserResult).Value;
 
                 // 1. Get Azure Blob Files
-                WriteMessage($"[{DateTime.Now}] Finding Image Files on Azure Blob Storage...");
+                WriteMessage($"[{DateTime.Now}] Finding Files on Azure Blob Storage...");
                 BlobContainer = GetBlobContainer();
                 if (null == BlobContainer)
                 {
@@ -44,31 +45,27 @@ namespace AzureBlobMimeTypeReset
                     return;
                 }
 
+                // 2. Update Mime Type
+                var pvd = new FileExtensionContentTypeProvider();
                 WriteMessage($"[{DateTime.Now}] Updating Mime Type...");
+                int affectedFilesCount = 0;
+
                 foreach (var blob in BlobContainer.ListBlobs().OfType<CloudBlockBlob>())
                 {
-                    string extension = Path.GetExtension(blob.Uri.AbsoluteUri);
-                    switch (extension.ToLower())
+                    string extension = Path.GetExtension(blob.Uri.AbsoluteUri).ToLower();
+                    bool isKnownType = pvd.TryGetContentType(extension, out string mimeType);
+                    if (isKnownType)
                     {
-                        case ".jpg":
-                        case ".jpeg":
-                            if (TrySetContentType(blob, "image/jpeg") != null)
-                            {
-                                WriteMessage($"[{DateTime.Now}] Updating {blob.Uri.AbsoluteUri}");
-                                await blob.SetPropertiesAsync();
-                            }
-                            break;
-                        case ".png":
-                            if (TrySetContentType(blob, "image/png") != null)
-                            {
-                                WriteMessage($"[{DateTime.Now}] Updating {blob.Uri.AbsoluteUri}");
-                                await blob.SetPropertiesAsync();
-                            }
-                            break;
-                        default:
-                            break;
+                        if (TrySetContentType(blob, mimeType) != null)
+                        {
+                            WriteMessage($"[{DateTime.Now}] Updating {blob.Uri.AbsoluteUri} => {mimeType}");
+                            await blob.SetPropertiesAsync();
+                            affectedFilesCount++;
+                        }
                     }
                 }
+
+                WriteMessage($"[{DateTime.Now}] Update completed, {affectedFilesCount} file(s) updated.");
             }
 
             Console.ReadKey();
