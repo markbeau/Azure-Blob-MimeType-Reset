@@ -47,25 +47,41 @@ namespace AzureBlobMimeTypeReset
                 WriteMessage($"[{DateTime.Now}] Updating Mime Type...");
                 foreach (var blob in BlobContainer.ListBlobs().OfType<CloudBlockBlob>())
                 {
-                    WriteMessage($"[{DateTime.Now}] Updating {blob.Uri.AbsoluteUri}");
                     string extension = Path.GetExtension(blob.Uri.AbsoluteUri);
-                    switch (extension)
+                    switch (extension.ToLower())
                     {
                         case ".jpg":
                         case ".jpeg":
-                            blob.Properties.ContentType = "image/jpeg";
+                            if (TrySetContentType(blob, "image/jpeg") != null)
+                            {
+                                WriteMessage($"[{DateTime.Now}] Updating {blob.Uri.AbsoluteUri}");
+                                await blob.SetPropertiesAsync();
+                            }
                             break;
                         case ".png":
-                            blob.Properties.ContentType = "image/png";
+                            if (TrySetContentType(blob, "image/png") != null)
+                            {
+                                WriteMessage($"[{DateTime.Now}] Updating {blob.Uri.AbsoluteUri}");
+                                await blob.SetPropertiesAsync();
+                            }
                             break;
                         default:
                             break;
                     }
-                    await blob.SetPropertiesAsync();
                 }
             }
 
             Console.ReadKey();
+        }
+
+        private static CloudBlockBlob TrySetContentType(CloudBlockBlob blob, string contentType)
+        {
+            if (blob.Properties.ContentType.ToLower() != contentType)
+            {
+                blob.Properties.ContentType = contentType;
+                return blob;
+            }
+            return null;
         }
 
         private static void WriteMessage(string message, ConsoleColor color = ConsoleColor.White, bool resetColor = true)
